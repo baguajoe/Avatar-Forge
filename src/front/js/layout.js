@@ -1,40 +1,53 @@
-import React from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import ScrollToTop from "./component/scrollToTop";
-import { BackendURL } from "./component/backendURL";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Outlet, Link } from 'react-router-dom';
 
-import { Home } from "./pages/home";
-import { Demo } from "./pages/demo";
-import { Single } from "./pages/single";
-import injectContext from "./store/appContext";
+import HomePage from '../pages/HomePage';
+import UploadPage from '../pages/UploadPage';
+import CustomizePage from '../pages/CustomizePage';
+import RigAvatarPage from '../pages/RigAvatarPage';
+import MotionCapturePage from '../pages/MotionCapturePage';
+import ProfilePage from '../pages/ProfilePage';
+import ErrorPage from '../pages/ErrorPage';
+import MotionFromVideoPage from '../pages/MotionFromVideoPage';
 
-import { Navbar } from "./component/navbar";
-import { Footer } from "./component/footer";
-
-//create your first component
 const Layout = () => {
-    //the basename is used when your project is published in a subdirectory and not in the root of the domain
-    // you can set the basename on the .env file located at the root of this project, E.g: BASENAME=/react-hello-webapp/
-    const basename = process.env.BASENAME || "";
-
-    if(!process.env.BACKEND_URL || process.env.BACKEND_URL == "") return <BackendURL/ >;
-
-    return (
-        <div>
-            <BrowserRouter basename={basename}>
-                <ScrollToTop>
-                    <Navbar />
-                    <Routes>
-                        <Route element={<Home />} path="/" />
-                        <Route element={<Demo />} path="/demo" />
-                        <Route element={<Single />} path="/single/:theid" />
-                        <Route element={<h1>Not found!</h1>} />
-                    </Routes>
-                    <Footer />
-                </ScrollToTop>
-            </BrowserRouter>
+  return (
+    <BrowserRouter>
+      <div className="d-flex">
+        {/* Sidebar */}
+        <div className="bg-light border-end" style={{ width: '250px', minHeight: '100vh' }}>
+          <div className="sidebar-heading p-3 fw-bold border-bottom">Avatar Creator</div>
+          <div className="list-group list-group-flush">
+            <Link to="/" className="list-group-item list-group-item-action">Home</Link>
+            <Link to="/upload" className="list-group-item list-group-item-action">Upload</Link>
+            <Link to="/customize" className="list-group-item list-group-item-action">Customize</Link>
+            <Link to="/rig" className="list-group-item list-group-item-action">Rig</Link>
+            <Link to="/motion" className="list-group-item list-group-item-action">Live Motion</Link>
+            <Link to="/motion-from-video" className="list-group-item list-group-item-action">From Video</Link>
+            <Link to="/profile" className="list-group-item list-group-item-action">Profile</Link>
+          </div>
         </div>
-    );
+
+        {/* Main Content */}
+        <div className="flex-grow-1 p-4">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/upload" element={<UploadPage />} />
+            <Route path="/customize" element={<CustomizePage />} />
+            <Route path="/rig" element={<RigAvatarPage />} />
+            <Route path="/motion" element={<MotionCapturePage />} />
+            <Route path="/motion-from-video" element={<MotionFromVideoPage />} />
+            <Route path="/profile" element={<ProfilePage userId={1} />} />
+            <Route path="*" element={<ErrorPage />} />
+          </Routes>
+
+          <footer className="text-center mt-5 border-top pt-3">
+            <p>© {new Date().getFullYear()} Avatar Creator</p>
+          </footer>
+        </div>
+      </div>
+    </BrowserRouter>
+  );
 };
 
-export default injectContext(Layout);
+export default Layout;
