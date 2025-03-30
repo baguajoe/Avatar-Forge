@@ -774,6 +774,24 @@ def save_beat_timestamps():
     db.session.commit()
     return jsonify({"message": "Beat timestamps saved", "id": beat.id})
 
+@api.route("/export-video", methods=["POST"])
+def export_video():
+    data = request.json
+    pose_data = data.get("frames")
+    audio_path = data.get("audio_path")
+
+    # Render a video from pose data (using placeholder for now)
+    output_path = "static/exports/animation.mp4"
+
+    # Simulate generation for now
+    clip = VideoFileClip("static/placeholder.mp4")
+    audioclip = AudioFileClip(audio_path)
+    final = clip.set_audio(audioclip)
+    final.write_videofile(output_path, codec="libx264")
+
+    return send_file(output_path, as_attachment=True)
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
