@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import MotionFromVideo from '../components/MotionFromVideo';
+import MotionFromVideo from '../component/MotionFromVideo';
 
 const MotionFromVideoPage = () => {
   const [videoUrl, setVideoUrl] = useState(null);

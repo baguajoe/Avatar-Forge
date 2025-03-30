@@ -2,17 +2,24 @@
 
 from flask import request, jsonify, Blueprint, Response, Flask
 from werkzeug.utils import secure_filename
+from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
 import os
 import subprocess
 import requests
 import json
+import uuid
 
 
 # from api import api
-from api.models import db, Avatar, Customization
+from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage
 from .utils.deep3d_api import send_to_deep3d, send_to_real_deep3d  # Ensure this exists and returns a valid URL
 from .utils.process_pose_video import process_and_save_pose
+from .utils.rigging import external_rigging_tool
+from .utils.skeleton_builder import create_default_skeleton
+
+
+
 
 
 import tempfile
@@ -46,6 +53,66 @@ DEEP3D_API_KEY = os.getenv("DEEP3D_API_KEY")  # Ensure to have the API key secur
 
 # Enable CORS
 CORS(api)
+
+# 🔐 Plan-based rigging limits
+PLAN_LIMITS = {
+    "Basic": 5,
+    "Pro": 20,
+    "Premium": float("inf")  # unlimited rigging
+}
+
+@api.route("/signup", methods=["POST"])
+def signup():
+    data = request.get_json()
+
+    username = data.get("username")
+    email = data.get("email")
+    password = data.get("password")
+
+    if not username or not email or not password:
+        return jsonify({"error": "Missing fields"}), 400
+
+    # Check if user already exists
+    if User.query.filter((User.username == username) | (User.email == email)).first():
+        return jsonify({"error": "User already exists"}), 409
+
+    hashed_password = generate_password_hash(password)
+
+    new_user = User(
+        username=username,
+        email=email,
+        password_hash=hashed_password
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "User created successfully"}), 201
+
+@api.route("/login", methods=["POST"])
+def login():
+    data = request.get_json()
+
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"error": "Missing email or password"}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    # Mock token (for now). Later, generate a JWT or session token.
+    token = str(uuid.uuid4())
+
+    return jsonify({
+        "message": "Login successful",
+        "user_id": user.id,
+        "username": user.username,
+        "token": token
+    }), 200
+
 
 @api.route("/create-avatar", methods=["POST"])
 def create_avatar():
@@ -366,6 +433,107 @@ def process_pose(video_path):
         return pose_data_file
 
     return None
+@api.route("/rig-avatar", methods=["POST"])
+def rig_avatar():
+    avatar_id = request.json.get("avatar_id")
+    user_id = request.json.get("user_id")
+
+    if not avatar_id or not user_id:
+        return jsonify({"error": "Missing avatar_id or user_id"}), 400
+
+    # Load user and check existence
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    # Get current usage or create new tracker
+    user_usage = UserUsage.query.filter_by(user_id=user_id).first()
+    if not user_usage:
+        user_usage = UserUsage(user_id=user_id, rigging_sessions=0)
+
+    # Enforce plan limits
+    plan = user.subscription_plan  # assume this is a string like 'Basic', 'Pro'
+    PLAN_LIMITS = {
+        "Basic": 5,
+        "Pro": 20,
+        "Premium": 50
+    }
+    limit = PLAN_LIMITS.get(plan, 5)
+
+    if user_usage.rigging_sessions >= limit:
+        return jsonify({
+            "error": "Rigging limit reached for your plan",
+            "plan": plan,
+            "limit": limit
+        }), 403
+
+    # Load avatar
+    avatar = Avatar.query.get(avatar_id)
+    if not avatar:
+        return jsonify({"error": "Avatar not found"}), 404
+
+    glb_path = os.path.join("static/uploads", avatar.filename)
+
+    # Rig the avatar (returns .glb/.fbx path + bone map)
+    rigged_file_path, bone_map = external_rigging_tool(glb_path)
+    if not rigged_file_path:
+        return jsonify({"error": "Rigging failed"}), 500
+
+    # Save rigged avatar
+    rig = RiggedAvatar(
+        user_id=user_id,
+        avatar_id=avatar_id,
+        rig_type="auto",
+        rig_file_url=rigged_file_path,
+        bone_map_json=bone_map
+    )
+    db.session.add(rig)
+    db.session.flush()
+
+    # Create skeleton hierarchy
+    skeleton_id = create_default_skeleton(rig.id)
+
+    # Increment usage
+    user_usage.rigging_sessions += 1
+    db.session.add(user_usage)
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Avatar rigged successfully",
+        "rig_url": rigged_file_path,
+        "rigged_avatar_id": rig.id,
+        "skeleton_id": skeleton_id,
+        "bone_map": bone_map,
+        "usage": user_usage.rigging_sessions,
+        "limit": limit
+    }), 200
+
+@api.route("/admin/user-usage", methods=["GET"])
+def get_all_user_usage():
+    usage = UserUsage.query.all()
+    return jsonify([
+        {
+            "user_id": u.user_id,
+            "rigging_sessions": u.rigging_sessions,
+            "storage_used_mb": u.storage_used_mb,
+            "videos_rendered": u.videos_rendered
+        } for u in usage
+    ])
+
+
+@api.route("/update-plan", methods=["POST"])
+def update_plan():
+    data = request.json
+    user_id = data["user_id"]
+    new_plan = data["plan"]
+    user = User.query.get(user_id)
+    if user:
+        user.subscription_plan = new_plan
+        db.session.commit()
+        return jsonify({"message": "Plan updated"}), 200
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)

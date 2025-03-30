@@ -1,4 +1,5 @@
-import { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useImperativeHandle } from "react";
+
 
 const AnimatedAvatar = React.forwardRef(({ style }, ref) => {
   const mouthRef = useRef();  // Mouth mesh reference for animation control

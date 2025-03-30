@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Stage } from "@react-three/drei";
-import AnimatedAvatar from "../components/AnimatedAvatar";
-import WaveformVisualizer from "../components/WaveformVisualizer";
+import AnimatedAvatar from "../component/AnimatedAvatar";
+import WaveformVisualizer from "../component/WaveformVisualizer";
 
 const DanceSyncPage = () => {
   const [beatTimes, setBeatTimes] = useState([]);
