@@ -29,6 +29,7 @@ torch = "*"
 torchvision = "*"
 matplotlib = "*"
 librosa = "*"
+stripe = "*"
 
 [requires]
 python_version = "3.10"

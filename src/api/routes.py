@@ -9,6 +9,8 @@ import subprocess
 import requests
 import json
 import uuid
+import stripe
+
 
 
 # from api import api
@@ -36,6 +38,16 @@ from .utils.process_pose_video import process_and_save_pose
 
 api = Blueprint('api', __name__)
 app = Flask(__name__)
+
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
+# Define Stripe prices (replace with your real Stripe Price IDs)
+STRIPE_PRICE_IDS = {
+    "Basic": "price_123_basic",
+    "Pro": "price_456_pro",
+    "Premium": "price_789_premium"
+}
+
 
 
 # MediaPipe setup
@@ -533,6 +545,49 @@ def update_plan():
         db.session.commit()
         return jsonify({"message": "Plan updated"}), 200
 
+# // backend route for Stripe (Flask)
+
+@api.route("/create-checkout-session", methods=["POST"])
+def create_checkout_session():
+    data = request.get_json()
+    plan = data.get("plan")
+    user_id = data.get("user_id")
+
+    if not plan or plan not in STRIPE_PRICE_IDS:
+        return jsonify({"error": "Invalid or missing plan"}), 400
+
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[
+                {
+                    "price": STRIPE_PRICE_IDS[plan],
+                    "quantity": 1,
+                }
+            ],
+            mode="subscription",
+            success_url=f"{os.getenv('FRONTEND_URL')}/subscription-success?user_id={user_id}&plan={plan}",
+            cancel_url=f"{os.getenv('FRONTEND_URL')}/pricing",
+            metadata={"user_id": user_id, "selected_plan": plan}
+        )
+        return jsonify({"url": checkout_session.url}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# backend route to get usage info
+@api.route("/api/usage/<int:user_id>", methods=["GET"])
+def get_usage(user_id):
+    user = User.query.get(user_id)
+    usage = UserUsage.query.filter_by(user_id=user_id).first()
+    PLAN_LIMITS = {"Basic": 5, "Pro": 20, "Premium": float("inf")}
+    limit = PLAN_LIMITS.get(user.subscription_plan, 5)
+    return jsonify({
+        "usage": usage.rigging_sessions,
+        "limit": limit,
+        "plan": user.subscription_plan
+    })
 
 
 if __name__ == "__main__":
