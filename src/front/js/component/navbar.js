@@ -39,6 +39,19 @@ const Navbar = () => {
             <li className="nav-item">
               <Link className="nav-link" to="/profile">Profile</Link>
             </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/dance-sync">Dance Sync</Link>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/motion-sessions">Sessions</Link>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/beat-editor">Beat Editor</Link>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/stripe-pricing">Pricing</Link>
+            </li>
+
           </ul>
         </div>
       </div>

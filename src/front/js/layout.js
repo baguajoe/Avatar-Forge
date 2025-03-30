@@ -14,8 +14,17 @@ import ErrorPage from './pages/ErrorPage';
 import MotionFromVideoPage from './pages/MotionFromVideoPage';
 import DanceSyncPage from './pages/DanceSyncPage';
 import AvatarWithPosePage from './pages/AvatarWithPosePage';
-import Login from './pages/LoginPage';
-import Signup from './pages/SignupPage';
+import AvatarViewPage from './pages/AvatarViewPage';
+import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
+import BeatEditorPage from './pages/BeatEditorPage';
+import BeatMapEditorPage from './pages/BeatMapEditorPage';
+import MotionSessionList from './pages/MotionSessionList.js';
+import ReplayMotionSession from './pages/ReplayMotionSession.js';
+import StripePricingPage from './pages/StripePricingPage.js';
+import VideoUploadPage from './pages/VideoUploadPage.js';
+import demo from './pages/demo.js'; // optional if used
+import single from './pages/single.js'; // optional if used
 
 const Layout = () => {
   return (
@@ -26,7 +35,7 @@ const Layout = () => {
 
         <div className="flex-grow-1 p-4">
           <Routes>
-            <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<HomePage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/customize" element={<CustomizePage />} />
             <Route path="/rig" element={<RigAvatarPage />} />
@@ -35,8 +44,17 @@ const Layout = () => {
             <Route path="/profile" element={<ProfilePage userId={1} />} />
             <Route path="/dance-sync" element={<DanceSyncPage />} />
             <Route path="/avatar-with-pose" element={<AvatarWithPosePage />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/login" element={<Login />} />
+            <Route path="/avatar-view" element={<AvatarViewPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/beat-editor" element={<BeatEditorPage />} />
+            <Route path="/beatmap-editor" element={<BeatMapEditorPage />} />
+            <Route path="/motion-sessions" element={<MotionSessionList />} />
+            <Route path="/replay-session/:sessionId" element={<ReplayMotionSession />} />
+            <Route path="/stripe-pricing" element={<StripePricingPage />} />
+            <Route path="/video-upload" element={<VideoUploadPage />} />
+            <Route path="/demo" element={<demo />} />
+            <Route path="/single" element={<single />} />
             <Route path="*" element={<ErrorPage />} />
           </Routes>
 

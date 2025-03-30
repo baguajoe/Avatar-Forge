@@ -76,10 +76,20 @@ class MotionCaptureSession(db.Model):
     source_type = db.Column(db.String(20))  # 'live' or 'video'
     video_filename = db.Column(db.String(255))
     pose_data_url = db.Column(db.String(512))
+
+    # 🔗 NEW FIELDS
+    audio_filename = db.Column(db.String(255))   # uploaded audio used in session
+    beat_timestamps = db.Column(db.JSON)         # list of beat times
+    rigged_avatar_id = db.Column(db.Integer, db.ForeignKey('rigged_avatar.id'))
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships
     user = db.relationship('User', backref='motion_sessions')
     avatar = db.relationship('Avatar', backref='motion_sessions')
+    rigged_avatar = db.relationship('RiggedAvatar', backref='linked_motion_sessions')
+
+
 
 
 class MotionFromVideo(db.Model):
@@ -111,14 +121,6 @@ class RiggedAvatar(db.Model):
     user = db.relationship('User', backref='rigged_avatars')
     avatar = db.relationship('Avatar', backref='rigs')
 
-class MotionAudioSync(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    avatar_id = db.Column(db.Integer, db.ForeignKey('avatar.id'))
-    audio_filename = db.Column(db.String(255))
-    beat_timestamps = db.Column(db.JSON)  # e.g. [0.5, 1.0, 1.5]
-    lip_sync_json = db.Column(db.JSON)    # [{'time': 1.1, 'viseme': 'O'}, ...]
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class DanceSession(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -154,5 +156,19 @@ class Skeleton(db.Model):
 
 
 
+class MotionAudioSync(db.Model):
+    __tablename__ = 'motion_audio_sync'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    avatar_id = db.Column(db.Integer, db.ForeignKey('avatar.id'), nullable=True)
+    song_name = db.Column(db.String(100), nullable=False)
+    audio_filename = db.Column(db.String(255), nullable=False)
+    beat_timestamps = db.Column(db.JSON, nullable=False)  # [0.5, 1.0, 1.5, ...]
+    custom_notes = db.Column(db.Text)  # Optional: JSON or text for custom cues
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='motion_audio_syncs')
+    avatar = db.relationship('Avatar', backref='audio_syncs')
 
 

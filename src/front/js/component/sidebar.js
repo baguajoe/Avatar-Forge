@@ -17,6 +17,12 @@ const Sidebar = () => {
         <Link to="/motion-from-video" className="list-group-item list-group-item-action">From Video</Link>
         <Link to="/dance-sync" className="list-group-item list-group-item-action">Dance Sync</Link>
         <Link to="/profile" className="list-group-item list-group-item-action">Profile</Link>
+        <Link to="/beat-editor" className="list-group-item list-group-item-action">Beat Editor</Link>
+        <Link to="/beatmap-editor" className="list-group-item list-group-item-action">BeatMap Editor</Link>
+        <Link to="/motion-sessions" className="list-group-item list-group-item-action">All Sessions</Link>
+        <Link to="/video-upload" className="list-group-item list-group-item-action">Video Upload</Link>
+        <Link to="/stripe-pricing" className="list-group-item list-group-item-action">Pricing</Link>
+
       </div>
     </div>
   );

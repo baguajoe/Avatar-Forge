@@ -14,11 +14,13 @@ import stripe
 
 
 # from api import api
-from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage
+from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage, MotionCaptureSession, MotionAudioSync
 from .utils.deep3d_api import send_to_deep3d, send_to_real_deep3d  # Ensure this exists and returns a valid URL
 from .utils.process_pose_video import process_and_save_pose
 from .utils.rigging import external_rigging_tool
 from .utils.skeleton_builder import create_default_skeleton
+from datetime import datetime
+
 
 
 
@@ -588,6 +590,189 @@ def get_usage(user_id):
         "limit": limit,
         "plan": user.subscription_plan
     })
+
+@api.route("/update-session-links", methods=["POST"])
+def update_session_links():
+    data = request.json
+    session_id = data.get("session_id")
+    rigged_avatar_id = data.get("rigged_avatar_id")
+    audio_filename = data.get("audio_filename")
+    beat_timestamps = data.get("beat_timestamps")
+
+    session = MotionCaptureSession.query.get(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    session.rigged_avatar_id = rigged_avatar_id
+    session.audio_filename = audio_filename
+    session.beat_timestamps = beat_timestamps
+
+    db.session.commit()
+    return jsonify({"message": "Session updated with audio and rig links"}), 200
+
+# api/routes.py
+
+@api.route("/motion-sessions/<int:user_id>", methods=["GET"])
+def get_motion_sessions(user_id):
+    sessions = MotionCaptureSession.query.filter_by(user_id=user_id).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "avatar_id": s.avatar_id,
+            "pose_data_url": s.pose_data_url,
+            "source_type": s.source_type,
+            "created_at": s.created_at.isoformat()
+        }
+        for s in sessions
+    ])
+
+@api.route("/save-beat-map", methods=["POST"])
+def save_beat_map():
+    if request.content_type.startswith("application/json"):
+        # Handle JSON payload
+        data = request.get_json()
+        user_id = data.get("user_id")
+        avatar_id = data.get("avatar_id")
+        audio_filename = data.get("audio_filename")
+        beat_timestamps = data.get("beat_timestamps")
+
+        if not all([user_id, audio_filename, beat_timestamps]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+    elif request.content_type.startswith("multipart/form-data"):
+        # Handle form-data (file upload)
+        audio = request.files.get("audio")
+        song_name = request.form.get("song_name")
+        beat_timestamps = request.form.get("beat_times", "[]")
+        user_id = request.form.get("user_id", None)
+
+        if not audio or not song_name:
+            return jsonify({"error": "Missing song name or audio file"}), 400
+
+        filename = secure_filename(audio.filename)
+        filepath = os.path.join("static", "uploads", filename)
+        audio.save(filepath)
+
+        audio_filename = filename
+        avatar_id = None  # Optional
+        try:
+            beat_timestamps = json.loads(beat_timestamps)
+        except Exception:
+            return jsonify({"error": "Invalid beat_times format"}), 400
+
+    else:
+        return jsonify({"error": "Unsupported Content-Type"}), 415
+
+    # Save to DB
+    beat_map = MotionAudioSync(
+        user_id=user_id,
+        avatar_id=avatar_id,
+        audio_filename=audio_filename,
+        beat_timestamps=beat_timestamps,
+        created_at=datetime.utcnow()
+    )
+    db.session.add(beat_map)
+    db.session.commit()
+
+    return jsonify({"message": "Beat map saved", "id": beat_map.id}), 201
+
+@api.route("/get-beat-map/<int:user_id>", methods=["GET"])
+def get_beat_maps(user_id):
+    beat_maps = MotionAudioSync.query.filter_by(user_id=user_id).all()
+    return jsonify([
+        {
+            "id": b.id,
+            "audio_filename": b.audio_filename,
+            "avatar_id": b.avatar_id,
+            "beat_timestamps": b.beat_timestamps,
+            "created_at": b.created_at.isoformat()
+        }
+        for b in beat_maps
+    ]), 200
+
+@api.route("/beat-map/<int:beat_map_id>", methods=["DELETE"])
+def delete_beat_map(beat_map_id):
+    beat_map = MotionAudioSync.query.get(beat_map_id)
+    if not beat_map:
+        return jsonify({"error": "Beat map not found"}), 404
+
+    db.session.delete(beat_map)
+    db.session.commit()
+    return jsonify({"message": "Beat map deleted successfully"}), 200
+
+@api.route("/beat-map/<int:beat_map_id>", methods=["PUT"])
+def update_beat_map(beat_map_id):
+    beat_map = MotionAudioSync.query.get(beat_map_id)
+    if not beat_map:
+        return jsonify({"error": "Beat map not found"}), 404
+
+    data = request.json
+    beat_timestamps = data.get("beat_timestamps")
+    if not beat_timestamps:
+        return jsonify({"error": "Missing beat_timestamps"}), 400
+
+    beat_map.beat_timestamps = beat_timestamps
+    db.session.commit()
+
+    return jsonify({"message": "Beat map updated"}), 200
+
+
+@api.route("/audio-sync", methods=["POST"])
+def save_audio_sync():
+    data = request.json
+    user_id = data.get("user_id")
+    avatar_id = data.get("avatar_id")
+    audio_filename = data.get("audio_filename")
+    beat_timestamps = data.get("beat_timestamps")
+    custom_notes = data.get("custom_notes")
+
+    if not user_id or not audio_filename or not beat_timestamps:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    sync = MotionAudioSync(
+        user_id=user_id,
+        avatar_id=avatar_id,
+        audio_filename=audio_filename,
+        beat_timestamps=beat_timestamps,
+        custom_notes=custom_notes,
+    )
+    db.session.add(sync)
+    db.session.commit()
+    return jsonify({"message": "Audio sync saved", "id": sync.id}), 200
+
+
+@api.route("/audio-sync/<int:user_id>", methods=["GET"])
+def get_audio_syncs(user_id):
+    syncs = MotionAudioSync.query.filter_by(user_id=user_id).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "audio_filename": s.audio_filename,
+            "beat_timestamps": s.beat_timestamps,
+            "custom_notes": s.custom_notes,
+        } for s in syncs
+    ])
+
+@api.route("/save-beat-timestamps", methods=["POST"])
+def save_beat_timestamps():
+    data = request.json
+    user_id = data.get("user_id")
+    song_name = data.get("song_name")
+    beat_times = data.get("beat_times")
+
+    if not user_id or not song_name or not beat_times:
+        return jsonify({"error": "Missing fields"}), 400
+
+    beat = MotionAudioSync(
+        user_id=user_id,
+        song_name=song_name,
+        beat_timestamps=beat_times,
+        created_at=datetime.utcnow()
+    )
+
+    db.session.add(beat)
+    db.session.commit()
+    return jsonify({"message": "Beat timestamps saved", "id": beat.id})
 
 
 if __name__ == "__main__":
