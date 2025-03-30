@@ -28,6 +28,7 @@ scipy = "*"
 torch = "*"
 torchvision = "*"
 matplotlib = "*"
+librosa = "*"
 
 [requires]
 python_version = "3.10"

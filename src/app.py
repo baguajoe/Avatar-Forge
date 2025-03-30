@@ -55,7 +55,7 @@ def sitemap():
     <html>
         <head><title>Welcome to StreampireX API</title></head>
         <body>
-            <h1>Welcome to StreampireX API</h1>
+            <h1>Welcome to Avatar Forge</h1>
             <p>This is the API gateway for StreampireX. Explore available endpoints below:</p>
             <ul>
                 {''.join(links)}
@@ -77,6 +77,10 @@ def serve_react_fallback(path):
     if os.path.exists(file_path):
         return send_from_directory(static_file_dir, path)
     return send_from_directory(static_file_dir, 'index.html')
+
+@app.route('/static/uploads/<filename>')
+def serve_uploaded_file(filename):
+    return send_from_directory('static/uploads', filename)
 
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 3001))

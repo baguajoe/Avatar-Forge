@@ -87,3 +87,22 @@ class RiggedAvatar(db.Model):
 
     user = db.relationship('User', backref='rigged_avatars')
     avatar = db.relationship('Avatar', backref='rigs')
+
+class MotionAudioSync(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    avatar_id = db.Column(db.Integer, db.ForeignKey('avatar.id'))
+    audio_filename = db.Column(db.String(255))
+    beat_timestamps = db.Column(db.JSON)  # e.g. [0.5, 1.0, 1.5]
+    lip_sync_json = db.Column(db.JSON)    # [{'time': 1.1, 'viseme': 'O'}, ...]
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class DanceSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    song_name = db.Column(db.String(100))
+    tempo = db.Column(db.Float)
+    beat_times = db.Column(db.JSON)
+    style = db.Column(db.String(50))
+    video_url = db.Column(db.String(255))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

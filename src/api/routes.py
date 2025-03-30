@@ -1,16 +1,47 @@
 # api/routes.py
 
-from flask import request, jsonify, Blueprint
+from flask import request, jsonify, Blueprint, Response, Flask
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
 import os
+import subprocess
+import requests
+import json
+
 
 # from api import api
 from api.models import db, Avatar, Customization
-from .utils.deep3d_api import send_to_deep3d  # Ensure this exists and returns a valid URL
+from .utils.deep3d_api import send_to_deep3d, send_to_real_deep3d  # Ensure this exists and returns a valid URL
+from .utils.process_pose_video import process_and_save_pose
+
+
+import tempfile
+import librosa
+import cv2
+import mediapipe as mp
+import numpy as np
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+from .utils.process_pose_video import process_and_save_pose
+
+
+
 
 api = Blueprint('api', __name__)
+app = Flask(__name__)
 
+
+# MediaPipe setup
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose()
+
+
+UPLOAD_FOLDER = os.path.join("static", "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Your Deep3D API Key (make sure to set this in your environment or replace it here)
+DEEP3D_API_URL = "https://api.deep3d.com/generate-avatar"  # Replace with the actual URL
+DEEP3D_API_KEY = os.getenv("DEEP3D_API_KEY")  # Ensure to have the API key securely stored
 
 
 # Enable CORS
@@ -92,3 +123,249 @@ def get_avatar(user_id):
         }
     }), 200
 
+@api.route('/analyze-beats', methods=['POST'])
+def analyze_beats():
+    file = request.files.get("audio")
+    if not file:
+        return jsonify({"error": "No audio file provided"}), 400
+
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        file.save(temp_file.name)
+        y, sr = librosa.load(temp_file.name)
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+        beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
+
+    return jsonify({"tempo": tempo, "beat_times": beat_times}), 200
+
+@api.route("/analyze-voice", methods=["POST"])
+def analyze_voice():
+    audio = request.files.get("audio")
+    if not audio:
+        return jsonify({"error": "No audio uploaded"}), 400
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        audio.save(temp_file.name)
+        y, sr = librosa.load(temp_file.name)
+        duration = librosa.get_duration(y=y, sr=sr)
+
+        # Mock result: simulate timing of words/phonemes
+        mock_visemes = [
+            {"time": 0.0, "viseme": "A"},
+            {"time": 0.3, "viseme": "E"},
+            {"time": 0.5, "viseme": "O"},
+            {"time": 0.8, "viseme": "M"}
+        ]
+
+        return jsonify({
+            "duration": duration,
+            "visemes": mock_visemes
+        }), 200
+
+# Define the route to convert to MP4
+@api.route("/convert-to-mp4", methods=["POST"])
+def convert_to_mp4():
+    video_file = request.json.get("filename")
+    if not video_file:
+        return jsonify({"error": "Missing filename"}), 400
+
+    video_path = os.path.join(UPLOAD_FOLDER, video_file)
+    mp4_filename = video_file.replace(".webm", ".mp4")
+    mp4_path = os.path.join(UPLOAD_FOLDER, mp4_filename)
+
+    command = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",  # adjust for quality
+        mp4_path
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        return jsonify({"mp4_url": f"/static/uploads/{mp4_filename}"}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Define the route to convert to AVI
+@api.route("/convert-to-avi", methods=["POST"])
+def convert_to_avi():
+    video_file = request.json.get("filename")
+    if not video_file:
+        return jsonify({"error": "Missing filename"}), 400
+
+    video_path = os.path.join(UPLOAD_FOLDER, video_file)
+    avi_filename = video_file.replace(".webm", ".avi")
+    avi_path = os.path.join(UPLOAD_FOLDER, avi_filename)
+
+    command = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",  # adjust for quality
+        avi_path
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        return jsonify({"avi_url": f"/static/uploads/{avi_filename}"}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Define the route to convert to MOV
+@api.route("/convert-to-mov", methods=["POST"])
+def convert_to_mov():
+    video_file = request.json.get("filename")
+    if not video_file:
+        return jsonify({"error": "Missing filename"}), 400
+
+    video_path = os.path.join(UPLOAD_FOLDER, video_file)
+    mov_filename = video_file.replace(".webm", ".mov")
+    mov_path = os.path.join(UPLOAD_FOLDER, mov_filename)
+
+    command = [
+        "ffmpeg", "-y",
+        "-i", video_path,
+        "-c:v", "prores_ks",  # Apple ProRes codec for .mov format
+        mov_path
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        return jsonify({"mov_url": f"/static/uploads/{mov_filename}"}), 200
+    except subprocess.CalledProcessError as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Define the route using Blueprint
+# Helper function to send selfie to Deep3D API
+def send_to_deep3d(filepath):
+    """
+    Send the uploaded selfie to Deep3D API to generate the 3D avatar.
+    """
+    try:
+        with open(filepath, 'rb') as image_file:
+            files = {'image': image_file}
+            headers = {"Authorization": f"Bearer {DEEP3D_API_KEY}"}
+            response = requests.post(DEEP3D_API_URL, files=files, headers=headers)
+
+        response.raise_for_status()  # Raise an error for bad responses
+
+        # Parse the response and return the avatar URL
+        data = response.json()
+        avatar_url = data.get("avatar_url")  # Adjust based on actual API response
+        return avatar_url
+
+    except Exception as e:
+        print(f"[Deep3D Error] {e}")
+        return None
+
+# Route to handle the selfie upload and 3D avatar creation
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
+# Function to check allowed file extensions
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@api.route('/upload-selfie', methods=['POST'])
+def upload_selfie():
+    image = request.files.get('image')  # Get the image from the request
+    
+    # Check if no image is uploaded
+    if not image:
+        return jsonify({"error": "No image uploaded"}), 400
+    
+    # Check if the file type is allowed
+    if not allowed_file(image.filename):
+        return jsonify({"error": "Invalid file type. Only image files are allowed."}), 400
+
+    # Save the image file to the server
+    filename = secure_filename(image.filename)
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    image.save(filepath)
+
+    # Send the image to Deep3D and retrieve the avatar URL
+    avatar_url = send_to_deep3d(filepath)
+
+    if avatar_url:
+        return jsonify({"avatar_url": avatar_url}), 200
+    else:
+        return jsonify({"error": "Avatar generation failed"}), 500
+
+# Route to process pose data from frontend
+@api.route('/process-pose', methods=['POST'])
+def process_pose():
+    # Assuming you have video frames or pose data from frontend
+    pose_data = request.json.get('pose_data')
+
+    # For now, let's just return the pose data back to simulate processing
+    return jsonify({"pose_landmarks": pose_data}), 200
+
+@api.route("/process-pose", methods=["POST"])
+def process_pose_route():
+    # Get the image from the POST request
+    image = request.files.get("image")
+    
+    if not image:
+        return jsonify({"error": "No image uploaded"}), 400
+    
+    # Process the pose in the image using the utility function
+    landmarks = process_pose(image)
+    
+    if landmarks:
+        return jsonify({"pose_landmarks": landmarks}), 200
+    else:
+        return jsonify({"error": "No landmarks detected"}), 404
+    
+@app.route('/upload-video', methods=['POST'])
+def upload_video():
+    video = request.files.get("video")
+    if not video:
+        return jsonify({"error": "No video file provided"}), 400
+
+    filename = video.filename
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    video.save(filepath)
+
+    pose_data = process_pose(filepath)
+    
+    if pose_data:
+        return jsonify({"pose_data_file": pose_data}), 200
+    else:
+        return jsonify({"error": "Pose processing failed"}), 500
+
+def process_pose(video_path):
+    # Open the video file
+    cap = cv2.VideoCapture(video_path)
+    pose_data = []
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Convert to RGB before processing with MediaPipe
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = pose.process(rgb_frame)
+
+        if results.pose_landmarks:
+            # Collect pose landmarks
+            pose_landmarks = [(landmark.x, landmark.y, landmark.z) for landmark in results.pose_landmarks.landmark]
+            pose_data.append(pose_landmarks)
+
+    cap.release()
+
+    if pose_data:
+        # Save pose data to a file or return directly
+        pose_data_file = "pose_data.json"
+        with open(os.path.join(UPLOAD_FOLDER, pose_data_file), 'w') as f:
+            json.dump(pose_data, f)
+        return pose_data_file
+
+    return None
+
+if __name__ == "__main__":
+    app.run(debug=True)

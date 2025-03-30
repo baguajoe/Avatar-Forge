@@ -9,6 +9,10 @@ import MotionCapturePage from '../pages/MotionCapturePage';
 import ProfilePage from '../pages/ProfilePage';
 import ErrorPage from '../pages/ErrorPage';
 import MotionFromVideoPage from '../pages/MotionFromVideoPage';
+import DanceSyncPage from '../pages/DanceSyncPage';
+import AvatarWithPosePage from './pages/AvatarWithPosePage';
+
+
 
 const Layout = () => {
   return (
@@ -25,6 +29,8 @@ const Layout = () => {
             <Link to="/motion" className="list-group-item list-group-item-action">Live Motion</Link>
             <Link to="/motion-from-video" className="list-group-item list-group-item-action">From Video</Link>
             <Link to="/profile" className="list-group-item list-group-item-action">Profile</Link>
+            <Link to="/dance-sync" className="list-group-item list-group-item-action">Dance Sync</Link>
+
           </div>
         </div>
 
@@ -39,6 +45,9 @@ const Layout = () => {
             <Route path="/motion-from-video" element={<MotionFromVideoPage />} />
             <Route path="/profile" element={<ProfilePage userId={1} />} />
             <Route path="*" element={<ErrorPage />} />
+            <Route path="/dance-sync" element={<DanceSyncPage />} />
+            <Route path="/avatar-with-pose" component={AvatarWithPosePage} />
+
           </Routes>
 
           <footer className="text-center mt-5 border-top pt-3">
