@@ -1,6 +1,8 @@
+# pyright: reportMissingImports=false
+
 # api/routes.py
 
-from flask import request, jsonify, Blueprint, Response, Flask
+from flask import request, jsonify, Blueprint, Response, Flask, url_for
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
@@ -11,10 +13,20 @@ import json
 import uuid
 import stripe
 
+# import moviepy
+from moviepy import AudioFileClip, VideoFileClip, ImageSequenceClip
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+
+from flask import send_file
+from uuid import uuid4
+import os
+from utils.video import generate_frame_images
+
+
 
 
 # from api import api
-from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage, MotionCaptureSession, MotionAudioSync
+from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage, MotionCaptureSession, MotionAudioSync, MotionSession, FBXExporter
 from .utils.deep3d_api import send_to_deep3d, send_to_real_deep3d  # Ensure this exists and returns a valid URL
 from .utils.process_pose_video import process_and_save_pose
 from .utils.rigging import external_rigging_tool
@@ -612,19 +624,6 @@ def update_session_links():
 
 # api/routes.py
 
-@api.route("/motion-sessions/<int:user_id>", methods=["GET"])
-def get_motion_sessions(user_id):
-    sessions = MotionCaptureSession.query.filter_by(user_id=user_id).all()
-    return jsonify([
-        {
-            "id": s.id,
-            "avatar_id": s.avatar_id,
-            "pose_data_url": s.pose_data_url,
-            "source_type": s.source_type,
-            "created_at": s.created_at.isoformat()
-        }
-        for s in sessions
-    ])
 
 @api.route("/save-beat-map", methods=["POST"])
 def save_beat_map():
@@ -791,7 +790,417 @@ def export_video():
 
     return send_file(output_path, as_attachment=True)
 
+# Save motion session
+@api.route("/save-motion-session", methods=["POST"])
+def save_motion_session():
+    data = request.json
+    user_id = data.get("user_id")
+    session_name = data.get("session_name")
+    frames = data.get("frames")
 
+    session = MotionSession(user_id=user_id, session_name=session_name, data=frames)
+    db.session.add(session)
+    db.session.commit()
+    return jsonify({"message": "Motion session saved", "id": session.id})
+
+# Get motion sessions by user
+@api.route("/motion-sessions/<int:user_id>", methods=["GET"])
+def get_motion_sessions(user_id):
+    # Fetch MotionSession data
+    motion_sessions = MotionSession.query.filter_by(user_id=user_id).all()
+
+    # Fetch MotionCaptureSession data
+    motion_capture_sessions = MotionCaptureSession.query.filter_by(user_id=user_id).all()
+
+    # Combine both session types into a single response
+    all_sessions = []
+
+    # Add MotionSession data to the response
+    all_sessions.extend([{
+        "id": s.id,
+        "name": s.session_name,
+        "created_at": s.created_at.isoformat()
+    } for s in motion_sessions])
+
+    # Add MotionCaptureSession data to the response
+    all_sessions.extend([{
+        "id": s.id,
+        "avatar_id": s.avatar_id,
+        "pose_data_url": s.pose_data_url,
+        "source_type": s.source_type,
+        "created_at": s.created_at.isoformat()
+    } for s in motion_capture_sessions])
+
+    return jsonify(all_sessions)
+
+
+# Export video (future)
+
+@api.route("/get-saved-sessions/<int:user_id>", methods=["GET"])
+def get_saved_sessions(user_id):
+    sessions = MotionSession.query.filter_by(user_id=user_id).order_by(MotionSession.created_at.desc()).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "name": s.name,
+            "created_at": s.created_at.isoformat(),
+            "frames": s.frames  # optional: remove this for lighter payload
+        } for s in sessions
+    ])
+
+@api.route("/export-mp4", methods=["POST"])
+def export_mp4():
+    data = request.get_json()
+    frames = data.get("frames")
+    audio_path = data.get("audio_path")
+
+    # Generate placeholder images (rendered frames can come from your app)
+    image_paths = generate_frame_images(frames)  # Custom function to render images
+
+    audio_clip = AudioFileClip(audio_path)
+    video = ImageSequenceClip(image_paths, fps=30).set_audio(audio_clip)
+    video_path = f"static/exports/session_{uuid4()}.mp4"
+    video.write_videofile(video_path, codec="libx264", audio_codec="aac")
+
+    return send_file(video_path, as_attachment=True)
+
+@api.route("/save-fx-timeline", methods=["POST"])
+def save_fx_timeline():
+    data = request.get_json()
+    session_id = data.get("session_id")
+    fx_timeline = data.get("fx_timeline")  # e.g., [{time: 2.5, type: "spark"}, ...]
+
+    session = MotionSession.query.get(session_id)
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    session.fx_timeline = fx_timeline
+    db.session.commit()
+    return jsonify({"message": "FX timeline saved successfully"}), 200
+
+@api.route('/get-saved-sessions/<int:user_id>')
+def get_sessions(user_id):
+    sessions = MotionSession.query.filter_by(user_id=user_id).all()
+    return jsonify([
+        {
+            'id': s.id,
+            'name': s.name,
+            'created_at': s.created_at,
+            'audio_url': url_for('static', filename=f'uploads/{s.audio_filename}', _external=True),
+            'thumbnail_url': url_for('static', filename=f'thumbnails/{s.thumbnail}', _external=True) if s.thumbnail else None
+        } for s in sessions
+    ])
+
+@api.route('/delete-session/<int:session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    session = MotionSession.query.get(session_id)
+    if session:
+        db.session.delete(session)
+        db.session.commit()
+        return jsonify({'message': 'Deleted'}), 200
+    return jsonify({'error': 'Not found'}), 404
+
+# Example route to fetch available colors from the database
+@api.route('/colors', methods=['GET'])
+def get_colors():
+    skin_colors = [
+        '#f5cba7',  # Light
+        '#8e735b',  # Medium
+        '#2d1f18',  # Dark
+    ]
+    outfit_colors = [
+        '#3498db',  # Blue
+        '#e74c3c',  # Red
+        '#2ecc71',  # Green
+    ]
+    return jsonify({"skin_colors": skin_colors, "outfit_colors": outfit_colors})
+
+# Placeholder function to implement the export logic
+def export_avatar_model(avatar_model, rigging_preset, file_type):
+    # Define export directory
+    export_dir = "exports"
+    os.makedirs(export_dir, exist_ok=True)  # Ensure the export folder exists
+
+    if file_type == "fbx":
+        # Logic to export as FBX
+        file_path = os.path.join(export_dir, f"{rigging_preset}_avatar.fbx")
+        # Implement actual export logic for FBX (e.g., using pyassimp or other libraries)
+        return file_path
+
+    elif file_type == "glb":
+        # Logic to export as GLTF (glb)
+        file_path = os.path.join(export_dir, f"{rigging_preset}_avatar.glb")
+        # Implement actual export logic for GLTF (e.g., using pygltf or glTF libraries)
+        return file_path
+
+    elif file_type == "obj":
+        # Logic to export as OBJ
+        file_path = os.path.join(export_dir, f"{rigging_preset}_avatar.obj")
+        # Implement actual export logic for OBJ (e.g., using a custom conversion or library)
+        return file_path
+
+    else:
+        # Raise an error if the file type is unsupported
+        raise ValueError(f"Unsupported file type: {file_type}")
+
+
+# Route to export the avatar model
+@api.route('/export-avatar', methods=['POST'])
+def export_avatar():
+    data = request.json
+    rigging_preset = data.get('riggingPreset')
+    avatar_model = data.get('avatarModel')
+    file_type = data.get('fileType', 'fbx')  # Default to FBX if no type is provided
+
+    # Define the export avatar model logic
+    def export_avatar_model(avatar_model, rigging_preset, file_type):
+        # Define bone mappings for Unity Humanoid, Unreal Skeleton, and Maya
+        bone_mappings = {
+            'unity': {
+                'root': 'root',  # Root bone (if applicable)
+                'pelvis': 'Hips',  # Pelvis (Unity Humanoid)
+                'spine': 'Spine',  # Main spine
+                'spine_01': 'Spine',  # Spine part 1
+                'spine_02': 'Chest',  # Chest area
+                'spine_03': 'Chest',  # Chest area (or you can add it as a more specific bone for detailed rigs)
+                'neck_01': 'Neck',  # Neck part 1 (Unity Humanoid)
+                'head': 'Head',  # Head
+                'l_clavicle': 'LeftShoulder',  # Left clavicle
+                'l_upper_arm': 'LeftUpperArm',  # Left upper arm
+                'l_forearm': 'LeftLowerArm',  # Left forearm
+                'l_hand': 'LeftHand',  # Left hand
+                'r_clavicle': 'RightShoulder',  # Right clavicle
+                'r_upper_arm': 'RightUpperArm',  # Right upper arm
+                'r_forearm': 'RightLowerArm',  # Right forearm
+                'r_hand': 'RightHand',  # Right hand
+                'l_femur': 'LeftThigh',  # Left thigh
+                'l_tibia': 'LeftShin',  # Left shin
+                'l_foot': 'LeftFoot',  # Left foot
+                'r_femur': 'RightThigh',  # Right thigh
+                'r_tibia': 'RightShin',  # Right shin
+                'r_foot': 'RightFoot',  # Right foot
+                'l_toe_base': 'LeftToeBase',  # Left toe (if applicable)
+                'r_toe_base': 'RightToeBase',  # Right toe (if applicable)
+                # Optional bones (if more detail is required for fingers and toes)
+                'l_thumb_01': 'LeftThumbProximal',  # Left thumb base
+                'l_thumb_02': 'LeftThumbIntermediate',  # Left thumb middle
+                'l_thumb_03': 'LeftThumbDistal',  # Left thumb tip
+                'l_index_01': 'LeftIndexProximal',  # Left index base
+                'l_index_02': 'LeftIndexIntermediate',  # Left index middle
+                'l_index_03': 'LeftIndexDistal',  # Left index tip
+                'l_middle_01': 'LeftMiddleProximal',  # Left middle base
+                'l_middle_02': 'LeftMiddleIntermediate',  # Left middle middle
+                'l_middle_03': 'LeftMiddleDistal',  # Left middle tip
+                'l_ring_01': 'LeftRingProximal',  # Left ring base
+                'l_ring_02': 'LeftRingIntermediate',  # Left ring middle
+                'l_ring_03': 'LeftRingDistal',  # Left ring tip
+                'l_pinky_01': 'LeftLittleProximal',  # Left pinky base
+                'l_pinky_02': 'LeftLittleIntermediate',  # Left pinky middle
+                'l_pinky_03': 'LeftLittleDistal',  # Left pinky tip
+                'r_thumb_01': 'RightThumbProximal',  # Right thumb base
+                'r_thumb_02': 'RightThumbIntermediate',  # Right thumb middle
+                'r_thumb_03': 'RightThumbDistal',  # Right thumb tip
+                'r_index_01': 'RightIndexProximal',  # Right index base
+                'r_index_02': 'RightIndexIntermediate',  # Right index middle
+                'r_index_03': 'RightIndexDistal',  # Right index tip
+                'r_middle_01': 'RightMiddleProximal',  # Right middle base
+                'r_middle_02': 'RightMiddleIntermediate',  # Right middle middle
+                'r_middle_03': 'RightMiddleDistal',  # Right middle tip
+                'r_ring_01': 'RightRingProximal',  # Right ring base
+                'r_ring_02': 'RightRingIntermediate',  # Right ring middle
+                'r_ring_03': 'RightRingDistal',  # Right ring tip
+                'r_pinky_01': 'RightLittleProximal',  # Right pinky base
+                'r_pinky_02': 'RightLittleIntermediate',  # Right pinky middle
+                'r_pinky_03': 'RightLittleDistal',  # Right pinky tip
+              
+                        # Lips for Unity
+                'l_upper_lip': 'LeftUpperLip',  # Left upper lip
+                'l_lower_lip': 'LeftLowerLip',  # Left lower lip
+                'r_upper_lip': 'RightUpperLip',  # Right upper lip
+                'r_lower_lip': 'RightLowerLip',  # Right lower lip
+                'mouth': 'Mouth',  # General mouth bone (optional, used for mouth movements)
+
+                        # Optional bones for detailed rigging (fingers, toes, etc.)
+                'l_thumb_01': 'LeftThumbProximal',
+                'r_thumb_01': 'RightThumbProximal',
+
+            },
+
+            'unreal': {
+                'root': 'root',
+                'pelvis': 'pelvis',
+                'spine': 'spine_01',
+                'spine_01': 'spine_01',
+                'spine_02': 'spine_02',
+                'spine_03': 'spine_03',
+                'neck': 'neck_01',
+                'head': 'head',
+                'l_clavicle': 'l_clavicle',
+                'l_upper_arm': 'l_upper_arm',
+                'l_forearm': 'l_forearm',
+                'l_hand': 'l_hand',
+                'r_clavicle': 'r_clavicle',
+                'r_upper_arm': 'r_upper_arm',
+                'r_forearm': 'r_forearm',
+                'r_hand': 'r_hand',
+                'l_femur': 'l_femur',
+                'l_tibia': 'l_tibia',
+                'l_foot': 'l_foot',
+                'r_femur': 'r_femur',
+                'r_tibia': 'r_tibia',
+                'r_foot': 'r_foot',
+                'l_toe_base': 'l_toe_base',
+                'r_toe_base': 'r_toe_base',
+                
+                # Optional bones for more detailed rigs
+                'l_thumb_01': 'l_thumb_01',
+                'l_thumb_02': 'l_thumb_02',
+                'l_thumb_03': 'l_thumb_03',
+                'l_index_01': 'l_index_01',
+                'l_index_02': 'l_index_02',
+                'l_index_03': 'l_index_03',
+                'l_middle_01': 'l_middle_01',
+                'l_middle_02': 'l_middle_02',
+                'l_middle_03': 'l_middle_03',
+                'l_ring_01': 'l_ring_01',
+                'l_ring_02': 'l_ring_02',
+                'l_ring_03': 'l_ring_03',
+                'l_pinky_01': 'l_pinky_01',
+                'l_pinky_02': 'l_pinky_02',
+                'l_pinky_03': 'l_pinky_03',
+                
+                'r_thumb_01': 'r_thumb_01',
+                'r_thumb_02': 'r_thumb_02',
+                'r_thumb_03': 'r_thumb_03',
+                'r_index_01': 'r_index_01',
+                'r_index_02': 'r_index_02',
+                'r_index_03': 'r_index_03',
+                'r_middle_01': 'r_middle_01',
+                'r_middle_02': 'r_middle_02',
+                'r_middle_03': 'r_middle_03',
+                'r_ring_01': 'r_ring_01',
+                'r_ring_02': 'r_ring_02',
+                'r_ring_03': 'r_ring_03',
+                'r_pinky_01': 'r_pinky_01',
+                'r_pinky_02': 'r_pinky_02',
+                'r_pinky_03': 'r_pinky_03',
+
+                            # Lips for Unreal
+                'l_upper_lip': 'L_UpperLip',  # Left upper lip
+                'l_lower_lip': 'L_LowerLip',  # Left lower lip
+                'r_upper_lip': 'R_UpperLip',  # Right upper lip
+                'r_lower_lip': 'R_LowerLip',  # Right lower lip
+                'mouth': 'Mouth',  # General mouth bone (optional)
+
+                # Optional bones for detailed rigging (fingers, toes, etc.)
+                'l_thumb_01': 'L_Thumb_01',
+                'r_thumb_01': 'R_Thumb_01',
+                # Additional finger and toe bones as needed
+            },
+
+            'maya': {
+                'root': 'root',  # Root bone for Maya (if applicable)
+                'pelvis': 'pelvis',  # Pelvis (Maya style)
+                'spine': 'spine',  # Spine
+                'neck': 'neck',  # Neck
+                'head': 'head',  # Head
+                'l_shoulder': 'l_shoulder',  # Left shoulder
+                'r_shoulder': 'r_shoulder',  # Right shoulder
+                'l_upper_arm': 'l_upper_arm',  # Left upper arm
+                'r_upper_arm': 'r_upper_arm',  # Right upper arm
+                'l_forearm': 'l_forearm',  # Left forearm
+                'r_forearm': 'r_forearm',  # Right forearm
+                'l_hand': 'l_hand',  # Left hand
+                'r_hand': 'r_hand',  # Right hand
+                # Add more Maya-specific bone names here (if necessary)
+                 # Legs and Feet
+                'l_thigh': 'l_thigh',  # Left thigh
+                'r_thigh': 'r_thigh',  # Right thigh
+                'l_shin': 'l_shin',  # Left shin
+                'r_shin': 'r_shin',  # Right shin
+                'l_foot': 'l_foot',  # Left foot
+                'r_foot': 'r_foot',  # Right foot
+                'l_toe': 'l_toe',  # Left toe
+                'r_toe': 'r_toe',  # Right toe
+
+                # Optional Bones for More Detail
+                'l_thumb_01': 'l_thumb_01',  # Left thumb base
+                'l_thumb_02': 'l_thumb_02',  # Left thumb middle
+                'l_thumb_03': 'l_thumb_03',  # Left thumb tip
+                'l_index_01': 'l_index_01',  # Left index base
+                'l_index_02': 'l_index_02',  # Left index middle
+                'l_index_03': 'l_index_03',  # Left index tip
+                'l_middle_01': 'l_middle_01',  # Left middle base
+                'l_middle_02': 'l_middle_02',  # Left middle middle
+                'l_middle_03': 'l_middle_03',  # Left middle tip
+                'l_ring_01': 'l_ring_01',  # Left ring base
+                'l_ring_02': 'l_ring_02',  # Left ring middle
+                'l_ring_03': 'l_ring_03',  # Left ring tip
+                'l_pinky_01': 'l_pinky_01',  # Left pinky base
+                'l_pinky_02': 'l_pinky_02',  # Left pinky middle
+                'l_pinky_03': 'l_pinky_03',  # Left pinky tip
+
+                'r_thumb_01': 'r_thumb_01',  # Right thumb base
+                'r_thumb_02': 'r_thumb_02',  # Right thumb middle
+                'r_thumb_03': 'r_thumb_03',  # Right thumb tip
+                'r_index_01': 'r_index_01',  # Right index base
+                'r_index_02': 'r_index_02',  # Right index middle
+                'r_index_03': 'r_index_03',  # Right index tip
+                'r_middle_01': 'r_middle_01',  # Right middle base
+                'r_middle_02': 'r_middle_02',  # Right middle middle
+                'r_middle_03': 'r_middle_03',  # Right middle tip
+                'r_ring_01': 'r_ring_01',  # Right ring base
+                'r_ring_02': 'r_ring_02',  # Right ring middle
+                'r_ring_03': 'r_ring_03',  # Right ring tip
+                'r_pinky_01': 'r_pinky_01',  # Right pinky base
+                'r_pinky_02': 'r_pinky_02',  # Right pinky middle
+                'r_pinky_03': 'r_pinky_03',  # Right pinky tip
+
+                        # Lips for Maya
+                'l_upper_lip': 'l_upper_lip',  # Left upper lip
+                'l_lower_lip': 'l_lower_lip',  # Left lower lip
+                'r_upper_lip': 'r_upper_lip',  # Right upper lip
+                'r_lower_lip': 'r_lower_lip',  # Right lower lip
+                'mouth': 'mouth',  # General mouth bone (optional)
+
+                # Optional bones for more detailed rigging (fingers, toes, etc.)
+                'l_thumb_01': 'l_thumb_01',
+                'r_thumb_01': 'r_thumb_01',
+            }
+        }
+
+        # Depending on rigging preset, use the appropriate bone structure
+        bones = bone_mappings.get(rigging_preset)
+
+        if bones:
+            # Prepare for FBX Export
+            file_path = f"exports/{rigging_preset}_avatar.fbx"
+            
+            # FBX Export Process (using pyfbx)
+            exporter = FBXExporter()
+            
+            # Exporting the avatar model using the bone mapping for Maya (FBX)
+            try:
+                # Example: Export using pyfbx with bone mappings
+                exporter.export(avatar_model, bone_structure=bones, output_path=file_path)
+
+                return file_path
+            except Exception as e:
+                raise ValueError(f"Error exporting FBX for Maya: {str(e)}")
+
+        else:
+            raise ValueError(f"Unsupported rigging preset: {rigging_preset}")
+
+    try:
+        # Call the export logic
+        file_path = export_avatar_model(avatar_model, rigging_preset, file_type)
+
+        # Return the file based on the requested format
+        return send_file(file_path, as_attachment=True, download_name=f"{rigging_preset}_avatar.{file_type}")
+    
+    except Exception as e:
+        # Handle errors in export process
+        return {"error": str(e)}, 400  
 
 if __name__ == "__main__":
     app.run(debug=True)

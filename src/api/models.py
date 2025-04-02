@@ -171,4 +171,42 @@ class MotionAudioSync(db.Model):
     user = db.relationship('User', backref='motion_audio_syncs')
     avatar = db.relationship('Avatar', backref='audio_syncs')
 
+class MotionSession(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    name = db.Column(db.String(100))
+    frames = db.Column(db.JSON)  # pose frames
+    fx_timeline = db.Column(db.JSON)  # optional: for beat-triggered FX
+    export_date = db.Column(db.DateTime, default=datetime.utcnow)
+    audio_filename = db.Column(db.String)
+    thumbnail = db.Column(db.String)  # Optional
 
+class ExportedFBX(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(120), nullable=False)
+    export_date = db.Column(db.DateTime, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref='exports')
+
+    def __repr__(self):
+        return f'<ExportedFBX {self.filename}>'
+    
+class FBXExporter:
+    def __init__(self):
+        pass
+
+    def export(self, model, bones, output_path, user_id):
+        # Export the FBX file (simplified)
+        try:
+            # Call the logic to export the FBX file using pyassimp or your tool
+            file_path = f"exports/{output_path}"
+            # Save the export record to the database
+            exported_fbx = ExportedFBX(filename=file_path, user_id=user_id)
+            db.session.add(exported_fbx)
+            db.session.commit()
+
+            print(f"Successfully exported to {file_path}")
+            return file_path
+        except Exception as e:
+            print(f"Error exporting FBX: {str(e)}")
+            raise

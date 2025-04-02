@@ -1,4 +1,3 @@
-// Layout.js
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './component/sidebar';
@@ -23,6 +22,8 @@ import MotionSessionList from './pages/MotionSessionList.js';
 import ReplayMotionSession from './pages/ReplayMotionSession.js';
 import StripePricingPage from './pages/StripePricingPage.js';
 import VideoUploadPage from './pages/VideoUploadPage.js';
+import AvatarExportPage from './pages/AvatarExportPage.js';
+import AvatarCustomizationPage from './pages/AvatarCustomizationPage'; // Import new page
 import demo from './pages/demo.js'; // optional if used
 import single from './pages/single.js'; // optional if used
 
@@ -35,7 +36,7 @@ const Layout = () => {
 
         <div className="flex-grow-1 p-4">
           <Routes>
-          <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<HomePage />} />
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/customize" element={<CustomizePage />} />
             <Route path="/rig" element={<RigAvatarPage />} />
@@ -53,9 +54,11 @@ const Layout = () => {
             <Route path="/replay-session/:sessionId" element={<ReplayMotionSession />} />
             <Route path="/stripe-pricing" element={<StripePricingPage />} />
             <Route path="/video-upload" element={<VideoUploadPage />} />
+            <Route path="/avatar-customization" element={<AvatarCustomizationPage />} /> {/* New route */}
             <Route path="/demo" element={<demo />} />
             <Route path="/single" element={<single />} />
             <Route path="*" element={<ErrorPage />} />
+            <Route path="/export-avatar" element={<AvatarExportPage />} />
           </Routes>
 
           <footer className="text-center mt-5 border-top pt-3">
