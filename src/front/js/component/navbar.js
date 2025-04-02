@@ -1,8 +1,17 @@
 // src/components/Navbar.js
-import React from "react";
+import React, {useState, useContext, useEffect} from "react";
 import { Link } from "react-router-dom";
+import { Context } from "../store/appContext";
 
 const Navbar = () => {
+  const [authStatus,setAuthStatus]=useState(false)
+  const {store, actions}=useContext(Context)
+  useEffect(()=> {
+    const authUpdate = async () => {
+      setAuthStatus (await actions.authenticate())
+    } 
+    authUpdate()
+  },[])
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark px-3">
       <div className="container-fluid">
@@ -38,6 +47,12 @@ const Navbar = () => {
             </li>
             <li className="nav-item">
               <Link className="nav-link" to="/profile">Profile</Link>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/login">Login</Link>
+            </li>
+            <li className="nav-item">
+              <Link className="nav-link" to="/signup">Signup</Link>
             </li>
             <li className="nav-item">
               <Link className="nav-link" to="/dance-sync">Dance Sync</Link>
