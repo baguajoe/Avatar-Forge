@@ -2,7 +2,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, useGLTF, XR, VRCanvas, Controllers } from '@react-three/drei';
+// import { OrbitControls, useGLTF, XR, VRCanvas, Controllers } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
+
 import { Line } from 'react-chartjs-2';
 import { Chart, TimeScale, LineElement, PointElement, LinearScale } from 'chart.js';
 import 'chartjs-adapter-date-fns';
