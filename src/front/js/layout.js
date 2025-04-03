@@ -26,6 +26,7 @@ import AvatarExportPage from './pages/AvatarExportPage.js';
 import AvatarCustomizationPage from './pages/AvatarCustomizationPage'; // Import new page
 import AccountSettingsPage from "./pages/AccountSettingsPage"; // ✅ no curly braces!
 import ClothingMatchPage from './pages/ClothingMatchPage';
+import MyOutfitsPage from "./pages/MyOutfitsPage";
 import demo from './pages/demo.js'; // optional if used
 import single from './pages/single.js'; // optional if used
 
@@ -59,6 +60,7 @@ const Layout = () => {
             <Route path="/video-upload" element={<VideoUploadPage />} />
             <Route path="/avatar-customization" element={<AvatarCustomizationPage />} /> {/* New route */}
             <Route path="/account-settings" element={<AccountSettingsPage />} />
+            <Route path="/my-outfits" element={<MyOutfitsPage />} />
             <Route path="/demo" element={<demo />} />
             <Route path="/single" element={<single />} />
             <Route path="*" element={<ErrorPage />} />

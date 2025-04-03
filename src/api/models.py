@@ -220,6 +220,7 @@ class SavedOutfit(db.Model):
     file = db.Column(db.String(255), nullable=False)
     style = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
+    is_favorite = db.Column(db.Boolean, default=False)
 
     def serialize(self):
         return {
@@ -246,3 +247,5 @@ class Outfit(db.Model):
             "style": self.style,
             "created_at": self.created_at.isoformat()
         }
+    
+

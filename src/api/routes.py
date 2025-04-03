@@ -1249,5 +1249,57 @@ def get_user_outfits():
     outfits = Outfit.query.filter_by(user_id=user_id).all()
     return jsonify([o.serialize() for o in outfits]), 200
 
+@api.route("/api/my-outfits", methods=["GET"])
+@jwt_required()
+def get_my_outfits():
+    user_id = get_jwt_identity()
+
+    outfits = SavedOutfit.query.filter_by(user_id=user_id).all()
+
+    outfit_list = [
+        {
+            "id": outfit.id,
+            "name": outfit.name,
+            "file": outfit.file,
+            "style": outfit.style
+        }
+        for outfit in outfits
+    ]
+
+    return jsonify({"outfits": outfit_list}), 200
+
+@api.route("/api/delete-outfit/<int:id>", methods=["DELETE"])
+@jwt_required()
+def delete_outfit(id):
+    user_id = get_jwt_identity()
+    outfit = SavedOutfit.query.get(id)
+
+    if not outfit:
+        return jsonify({"message": "Outfit not found"}), 404
+    if outfit.user_id != user_id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    db.session.delete(outfit)
+    db.session.commit()
+
+    return jsonify({"message": "Outfit deleted successfully"}), 200
+
+@api.route("/api/favorite-outfit/<int:id>", methods=["POST"])
+@jwt_required()
+def favorite_outfit(id):
+    user_id = get_jwt_identity()
+    outfit = SavedOutfit.query.get(id)
+
+    if not outfit:
+        return jsonify({"message": "Outfit not found"}), 404
+    if outfit.user_id != user_id:
+        return jsonify({"message": "Unauthorized"}), 403
+
+    outfit.is_favorite = True
+    db.session.commit()
+
+    return jsonify({"message": "Outfit favorited successfully"}), 200
+
+
 if __name__ == "__main__":
     app.run(debug=True)
