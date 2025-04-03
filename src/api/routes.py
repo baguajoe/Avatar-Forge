@@ -12,6 +12,7 @@ import subprocess
 import requests
 import json
 import uuid
+import trimesh
 import stripe
 
 # import moviepy
@@ -1299,6 +1300,45 @@ def favorite_outfit(id):
     db.session.commit()
 
     return jsonify({"message": "Outfit favorited successfully"}), 200
+
+@api.route("/export-combined-avatar", methods=["POST"])
+@jwt_required()
+def export_combined_avatar():
+    data = request.get_json()
+    user_id = get_jwt_identity()
+    avatar_id = data.get("avatar_id")
+    outfit_file = data.get("outfit_file")
+
+    # 1. Validate user avatar
+    avatar = Avatar.query.get(avatar_id)
+    if not avatar or avatar.user_id != user_id:
+        return {"error": "Avatar not found or unauthorized."}, 404
+
+    # 2. Define paths
+    avatar_path = os.path.join("static", "uploads", avatar.filename)
+    outfit_path = os.path.join("static", "outfits", outfit_file)
+
+    if not os.path.exists(avatar_path) or not os.path.exists(outfit_path):
+        return {"error": "Avatar or outfit file missing."}, 400
+
+    try:
+        # 3. Load both models (assume GLB format for simplicity)
+        avatar_mesh = trimesh.load(avatar_path)
+        outfit_mesh = trimesh.load(outfit_path)
+
+        # 4. Merge them into a single scene
+        combined_scene = trimesh.Scene()
+        combined_scene.add_geometry(avatar_mesh, node_name="avatar")
+        combined_scene.add_geometry(outfit_mesh, node_name="outfit")
+
+        # 5. Export to GLB
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".glb") as tmp_file:
+            combined_scene.export(tmp_file.name)
+            return send_file(tmp_file.name, as_attachment=True, download_name="combined_avatar.glb")
+
+    except Exception as e:
+        print("[Export Error]", e)
+        return {"error": "Failed to export combined model."}, 500
 
 
 if __name__ == "__main__":

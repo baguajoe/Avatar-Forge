@@ -67,6 +67,36 @@ const MyOutfitsPage = () => {
       }
     };
 
+    const handleExportCombined = async (outfitFile) => {
+      try {
+        const res = await fetch(`${process.env.BACKEND_URL}/export-combined-avatar`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${store.token}`,
+          },
+          body: JSON.stringify({
+            avatar_id: store.userAvatarId, // replace with actual avatar ID logic
+            outfit_file: outfitFile,
+          }),
+        });
+
+        if (!res.ok) throw new Error("Export failed");
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "combined_avatar.glb";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (err) {
+        console.error("Export error:", err);
+        alert("Failed to export combined avatar.");
+      }
+    };
+
     return (
       <div className="container mt-4">
         <h2>🧍‍♂️ My Saved Outfits</h2>
@@ -105,6 +135,13 @@ const MyOutfitsPage = () => {
                       onClick={() => navigate(`/rig?outfit=${encodeURIComponent(outfit.file)}`)}
                     >
                       Rig Preview
+                    </button>
+
+                    <button
+                      className="btn btn-sm btn-dark"
+                      onClick={() => handleExportCombined(outfit.file)}
+                    >
+                      Export Avatar + Outfit
                     </button>
 
                     <button
