@@ -24,6 +24,8 @@ import StripePricingPage from './pages/StripePricingPage.js';
 import VideoUploadPage from './pages/VideoUploadPage.js';
 import AvatarExportPage from './pages/AvatarExportPage.js';
 import AvatarCustomizationPage from './pages/AvatarCustomizationPage'; // Import new page
+import AccountSettingsPage from "./pages/AccountSettingsPage"; // ✅ no curly braces!
+import ClothingMatchPage from './pages/ClothingMatchPage';
 import demo from './pages/demo.js'; // optional if used
 import single from './pages/single.js'; // optional if used
 
@@ -40,6 +42,7 @@ const Layout = () => {
             <Route path="/upload" element={<UploadPage />} />
             <Route path="/customize" element={<CustomizePage />} />
             <Route path="/rig" element={<RigAvatarPage />} />
+            <Route path="/clothing-match" element={<ClothingMatchPage />} />
             <Route path="/motion" element={<MotionCapturePage />} />
             <Route path="/motion-from-video" element={<MotionFromVideoPage />} />
             <Route path="/profile" element={<ProfilePage userId={1} />} />
@@ -55,6 +58,7 @@ const Layout = () => {
             <Route path="/stripe-pricing" element={<StripePricingPage />} />
             <Route path="/video-upload" element={<VideoUploadPage />} />
             <Route path="/avatar-customization" element={<AvatarCustomizationPage />} /> {/* New route */}
+            <Route path="/account-settings" element={<AccountSettingsPage />} />
             <Route path="/demo" element={<demo />} />
             <Route path="/single" element={<single />} />
             <Route path="*" element={<ErrorPage />} />

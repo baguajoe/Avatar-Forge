@@ -3,6 +3,7 @@
 # api/routes.py
 
 from flask import request, jsonify, Blueprint, Response, Flask, url_for
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
@@ -26,7 +27,7 @@ from utils.video import generate_frame_images
 
 
 # from api import api
-from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage, MotionCaptureSession, MotionAudioSync, MotionSession, FBXExporter
+from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage, MotionCaptureSession, MotionAudioSync, MotionSession, FBXExporter, SavedOutfit, Outfit
 from .utils.deep3d_api import send_to_deep3d, send_to_real_deep3d  # Ensure this exists and returns a valid URL
 from .utils.process_pose_video import process_and_save_pose
 from .utils.rigging import external_rigging_tool
@@ -257,28 +258,39 @@ def analyze_voice():
 # Define the route to convert to MP4
 @api.route("/convert-to-mp4", methods=["POST"])
 def convert_to_mp4():
-    video_file = request.json.get("filename")
+    data = request.get_json()
+    video_file = data.get("filename")
+
     if not video_file:
         return jsonify({"error": "Missing filename"}), 400
 
-    video_path = os.path.join(UPLOAD_FOLDER, video_file)
-    mp4_filename = video_file.replace(".webm", ".mp4")
-    mp4_path = os.path.join(UPLOAD_FOLDER, mp4_filename)
+    # Define paths
+    input_path = os.path.join("static", "uploads", video_file)
+    output_filename = video_file.replace(".webm", ".mp4")
+    output_path = os.path.join("static", "exports", output_filename)
 
+    # Ensure export folder exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+    # FFmpeg command
     command = [
         "ffmpeg", "-y",
-        "-i", video_path,
+        "-i", input_path,
         "-c:v", "libx264",
         "-preset", "fast",
-        "-crf", "23",  # adjust for quality
-        mp4_path
+        "-crf", "23",
+        output_path
     ]
 
     try:
         subprocess.run(command, check=True)
-        return jsonify({"mp4_url": f"/static/uploads/{mp4_filename}"}), 200
+        return jsonify({
+            "message": "Conversion successful",
+            "mp4_url": f"/static/exports/{output_filename}"
+        }), 200
     except subprocess.CalledProcessError as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({ "error": str(e) }), 500
+
 
 
 # Define the route to convert to AVI
@@ -1201,6 +1213,41 @@ def export_avatar():
     except Exception as e:
         # Handle errors in export process
         return {"error": str(e)}, 400  
+    
+# api.py
+
+
+
+@api.route("/save-outfit", methods=["POST"])
+@jwt_required()
+def save_outfit():
+    user_id = get_jwt_identity()
+    data = request.get_json()
+
+    name = data.get("name")
+    file = data.get("file")
+    style = data.get("style")
+
+    if not name or not file:
+        return jsonify({"message": "Missing outfit data"}), 400
+
+    new_outfit = SavedOutfit(
+        user_id=user_id,
+        name=name,
+        file=file,
+        style=style
+    )
+    db.session.add(new_outfit)
+    db.session.commit()
+
+    return jsonify({"message": "Outfit saved successfully"}), 200
+
+@api.route("/user-outfits", methods=["GET"])
+@jwt_required()
+def get_user_outfits():
+    user_id = get_jwt_identity()
+    outfits = Outfit.query.filter_by(user_id=user_id).all()
+    return jsonify([o.serialize() for o in outfits]), 200
 
 if __name__ == "__main__":
     app.run(debug=True)

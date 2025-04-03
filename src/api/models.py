@@ -210,3 +210,39 @@ class FBXExporter:
         except Exception as e:
             print(f"Error exporting FBX: {str(e)}")
             raise
+
+# models.py
+
+class SavedOutfit(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    name = db.Column(db.String(120), nullable=False)
+    file = db.Column(db.String(255), nullable=False)
+    style = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.now())
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "file": self.file,
+            "style": self.style,
+            "created_at": self.created_at,
+        }
+
+class Outfit(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    file = db.Column(db.String(255), nullable=False)
+    style = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def serialize(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "file": self.file,
+            "style": self.style,
+            "created_at": self.created_at.isoformat()
+        }

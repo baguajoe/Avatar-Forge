@@ -13,6 +13,7 @@ const Sidebar = () => {
         <Link to="/upload" className="list-group-item list-group-item-action">Upload</Link>
         <Link to="/customize" className="list-group-item list-group-item-action">Customize</Link>
         <Link to="/rig" className="list-group-item list-group-item-action">Rig</Link>
+        <Link to="/clothing-match" className="list-group-item list-group-item-action">Clothing Match</Link>
         <Link to="/motion" className="list-group-item list-group-item-action">Live Motion</Link>
         <Link to="/motion-from-video" className="list-group-item list-group-item-action">From Video</Link>
         <Link to="/dance-sync" className="list-group-item list-group-item-action">Dance Sync</Link>
