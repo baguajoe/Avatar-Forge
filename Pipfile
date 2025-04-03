@@ -54,6 +54,7 @@ moviepy = "*"
 opencv-python = "*"
 mediapipe = "*"
 librosa = "*"
+trimesh = "*"
 
 [dev-packages]
 

@@ -13,12 +13,12 @@ const OutfitModel = ({ file }) => {
   return <primitive object={scene} scale={1.5} position={[0, 0, 0]} />;
 };
 
-const AvatarPreview = ({ outfitFile }) => {
-  if (!outfitFile) return null;
+export const AvatarPreview = ({ outfitFile }) => {
+  // if (!outfitFile) return null;
 
   return (
     <div className="border mt-3" style={{ width: "100%", height: "400px" }}>
-      <Canvas camera={{ position: [0, 1.5, 3] }}>
+      {/* <Canvas camera={{ position: [0, 1.5, 3] }}>
         <ambientLight intensity={0.9} />
         <directionalLight position={[0, 5, 5]} intensity={0.6} />
 
@@ -28,9 +28,9 @@ const AvatarPreview = ({ outfitFile }) => {
         </Suspense>
 
         <OrbitControls enableZoom={true} />
-      </Canvas>
+      </Canvas> */}
     </div>
   );
 };
 
-export default AvatarPreview;
+
