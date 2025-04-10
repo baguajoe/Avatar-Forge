@@ -1,0 +1,130 @@
+.toast-message {
+    background-color: #222;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-align: center;
+    margin: 10px auto;
+    width: fit-content;
+    animation: fadein 0.4s ease, fadeout 0.4s ease 2.6s;
+  }
+  
+  @keyframes fadein {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes fadeout {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-10px); }
+  }
+  
+  .progress-bar {
+    display: flex;
+    justify-content: space-around;
+    margin: 20px auto;
+    max-width: 600px;
+  }
+  
+  .progress-step-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .progress-step {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: lightgray;
+    margin-bottom: 5px;
+  }
+  
+  .progress-step.active {
+    background-color: limegreen;
+  }
+  
+  .step-label {
+    font-size: 12px;
+  }
+  
+  .skeleton-loader {
+    width: 100%;
+    height: 200px;
+    background: linear-gradient(90deg, #eee, #ccc, #eee);
+    animation: shimmer 1.2s infinite;
+    margin-top: 10px;
+    border-radius: 10px;
+  }
+  
+  @keyframes shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: 200px 0; }
+  }
+  
+  .btn-primary, .btn-secondary {
+    padding: 10px 20px;
+    margin: 10px 5px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+  
+  .btn-primary {
+    background-color: #007bff;
+    color: white;
+  }
+  
+  .btn-secondary {
+    background-color: #f0f0f0;
+    color: #333;
+  }
+  
+  .btn-primary:hover,
+  .btn-secondary:hover {
+    transform: scale(1.03);
+  }
+  
+  .btn-primary:hover {
+    background-color: #0056b3;
+  }
+  
+  .btn-secondary:hover {
+    background-color: #ddd;
+  }
+  
+  .preview-section,
+  .mesh-section,
+  .mesh-preview,
+  .avatar-generation,
+  .final-avatar {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px auto;
+    max-width: 700px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+  
+  @media (max-width: 768px) {
+    .upload-container {
+      padding: 10px;
+    }
+  
+    .progress-bar {
+      flex-direction: column;
+      align-items: center;
+    }
+  
+    .btn-primary, .btn-secondary {
+      width: 100%;
+      font-size: 14px;
+    }
+  
+    .skeleton-loader {
+      height: 150px;
+    }
+  }

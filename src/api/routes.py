@@ -29,7 +29,6 @@ from utils.video import generate_frame_images
 
 # from api import api
 from api.models import db, Avatar, Customization, RiggedAvatar, User, UserUsage, MotionCaptureSession, MotionAudioSync, MotionSession, FBXExporter, SavedOutfit, Outfit
-from .utils.deep3d_api import send_to_deep3d, send_to_real_deep3d  # Ensure this exists and returns a valid URL
 from .utils.process_pose_video import process_and_save_pose
 from .utils.rigging import external_rigging_tool
 from .utils.skeleton_builder import create_default_skeleton
@@ -45,9 +44,16 @@ import librosa
 import cv2
 import mediapipe as mp
 import numpy as np
+import pyvista as pv
+import scipy.spatial as sp
 from dotenv import load_dotenv
 load_dotenv()  # Load environment variables from .env file
-from .utils.process_pose_video import process_and_save_pose
+from api.utils.process_pose_video import process_and_save_pose
+from api.utils.face_mesh_detection import detect_face_mesh
+from api.utils.selfie_to_avatar import selfie_to_avatar  # Importing the function from selfie_to_avatar.py
+
+
+
 
 
 
@@ -70,13 +76,31 @@ STRIPE_PRICE_IDS = {
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 
+# MediaPipe Face Detection setup
+mp_face_detection = mp.solutions.face_detection
+mp_drawing = mp.solutions.drawing_utils
+
+# MediaPipe Face Mesh setup
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    static_image_mode=True,
+    max_num_faces=1,
+    min_detection_confidence=0.5
+)
+
+# Set up Face Detection
+face_detection = mp_face_detection.FaceDetection(min_detection_confidence=0.2)
 
 UPLOAD_FOLDER = os.path.join("static", "uploads")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+EXPORT_FOLDER = os.path.join("static", "exports")
+BODY_FOLDER = os.path.join("static", "bodies")
+THUMBNAIL_FOLDER = os.path.join("static", "thumbnail")
 
-# Your Deep3D API Key (make sure to set this in your environment or replace it here)
-DEEP3D_API_URL = "https://api.deep3d.com/generate-avatar"  # Replace with the actual URL
-DEEP3D_API_KEY = os.getenv("DEEP3D_API_KEY")  # Ensure to have the API key securely stored
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(EXPORT_FOLDER, exist_ok=True)
+os.makedirs(BODY_FOLDER, exist_ok=True)
+os.makedirs(THUMBNAIL_FOLDER, exist_ok=True)
+
 
 
 # Enable CORS
@@ -151,16 +175,176 @@ def create_avatar():
         return jsonify({"error": "Missing image or user ID"}), 400
 
     filename = secure_filename(image.filename)
-    filepath = os.path.join("temp_uploads", filename)
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
     image.save(filepath)
 
-    avatar_url = send_to_deep3d(filepath)
+    # Use MediaPipe to detect faces in the image
+    img = cv2.imread(filepath)
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    results = face_detection.process(img_rgb)
 
-    avatar = Avatar(user_id=user_id, avatar_url=avatar_url, filename=filename)
-    db.session.add(avatar)
-    db.session.commit()
+    if results.detections:
+        # Draw face detections on the image
+        for detection in results.detections:
+            mp_drawing.draw_detection(img, detection)
+        
+        # Save the processed image (with face detections)
+        processed_filepath = os.path.join(UPLOAD_FOLDER, f"processed_{filename}")
+        cv2.imwrite(processed_filepath, img)
 
-    return jsonify({"avatar_url": avatar_url}), 200
+        avatar_url = f"/static/uploads/{processed_filepath.split(os.sep)[-1]}"
+
+        # Save avatar to the database
+        avatar = Avatar(user_id=user_id, avatar_url=avatar_url, filename=processed_filepath.split(os.sep)[-1])
+        db.session.add(avatar)
+        db.session.commit()
+
+        return jsonify({"avatar_url": avatar_url}), 200
+    else:
+        return jsonify({"error": "No face detected in the image"}), 400
+
+
+@api.route("/generate-avatar", methods=["POST"])
+def generate_avatar():
+    try:
+        # Log the start of processing
+        print("Starting avatar generation process")
+        
+        # Check if required libraries are available
+        try:
+            import pyvista as pv
+            import scipy.spatial as sp
+        except ImportError as e:
+            print(f"Missing required library: {str(e)}")
+            return jsonify({"error": f"Server missing required library: {str(e)}"}), 500
+        
+        # Initialize MediaPipe Face Mesh inside the function
+        mp_face_mesh = mp.solutions.face_mesh
+        face_mesh = mp_face_mesh.FaceMesh(
+            static_image_mode=True,
+            max_num_faces=1,
+            min_detection_confidence=0.5
+        )
+
+        # Retrieve the image(s) from the request
+        image = request.files.get("image")  # Single image upload
+        front_image = request.files.get("front_image")  # Front view for multi-view
+        left_image = request.files.get("left_image")  # Left view for multi-view
+        right_image = request.files.get("right_image")  # Right view for multi-view
+
+        # Check if either single or multiple images are provided
+        if not (image or (front_image and left_image and right_image)):
+            return jsonify({"error": "At least one image or all three views (front, left, right) are required"}), 400
+
+        filename = secure_filename(image.filename if image else front_image.filename)
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+        if image:
+            image.save(filepath)  # Save the single image
+        elif front_image and left_image and right_image:
+            # Save the three views if provided
+            front_filepath = os.path.join(UPLOAD_FOLDER, "front_" + filename)
+            left_filepath = os.path.join(UPLOAD_FOLDER, "left_" + filename)
+            right_filepath = os.path.join(UPLOAD_FOLDER, "right_" + filename)
+
+            front_image.save(front_filepath)
+            left_image.save(left_filepath)
+            right_image.save(right_filepath)
+
+        print(f"Image(s) saved to {filepath}")
+
+        # Read image and convert to RGB
+        img = cv2.imread(filepath)
+        if img is None:
+            print(f"Failed to read image at {filepath}")
+            return jsonify({"error": "Failed to read uploaded image"}), 400
+
+        h, w, _ = img.shape
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        print("Processing with face mesh")
+        results = face_mesh.process(img_rgb)
+        if not results.multi_face_landmarks:
+            return jsonify({"error": "No face landmarks found"}), 400
+
+        # Generate mesh (using face mesh landmarks)
+        landmarks = results.multi_face_landmarks[0]
+        vertices = np.array([[lm.x * w, lm.y * h, lm.z * 100] for lm in landmarks.landmark])
+
+        # Use the actual triangulation from MediaPipe
+        from mediapipe.python.solutions.face_mesh_connections import FACEMESH_TESSELATION
+        
+        # Create proper faces for trimesh
+        edges = {}
+        for connection in FACEMESH_TESSELATION:
+            a, b = connection
+            if a not in edges:
+                edges[a] = []
+            if b not in edges:
+                edges[b] = []
+            edges[a].append(b)
+            edges[b].append(a)
+
+        faces = []
+        visited = set()
+
+        for i in range(len(vertices)):
+            if i in edges:
+                neighbors = edges[i]
+                for j in range(len(neighbors)):
+                    for k in range(j+1, len(neighbors)):
+                        face = sorted([i, neighbors[j], neighbors[k]])
+                        face_tuple = tuple(face)
+                        if face_tuple not in visited:
+                            if neighbors[j] in edges.get(neighbors[k], []):
+                                faces.append(face)
+                                visited.add(face_tuple)
+
+        # Step 1: Poisson Surface Reconstruction using PyVista
+        point_cloud = pv.PolyData(vertices)
+        surface = point_cloud.reconstruct_surface(method='poisson', depth=9)  # Poisson reconstruction
+
+        # Step 2: Apply Laplacian smoothing to the surface
+        surface = surface.smooth(n_iter=100, relaxation_factor=0.1)  # Apply smoothing
+
+        # Save the surface as .ply or .stl file
+        surface_path = os.path.join(UPLOAD_FOLDER, f"{filename}_surface.ply")
+        surface.save(surface_path)
+
+        # Step 3: Apply Ear Clipping Triangulation (if you want to replace Delaunay)
+        def ear_clipping_triangulation(points):
+            tri = sp.Delaunay(points)  # Perform Delaunay triangulation
+            return tri.simplices
+
+        triangles = ear_clipping_triangulation(vertices)
+
+        # Step 4: Create mesh with Trimesh and apply Laplacian smoothing
+        mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
+        mesh = mesh.subdivide()  # Apply Laplacian smoothing to mesh
+
+        # Export the final mesh (GLB format)
+        output_path = os.path.join(UPLOAD_FOLDER, f"{filename}_avatar.glb")
+        mesh.export(output_path)
+
+        # Verify file creation
+        if not os.path.exists(output_path):
+            print(f"ERROR: File was not created at {output_path}")
+            return jsonify({"error": "Failed to create avatar file"}), 500
+
+        print(f"SUCCESS: File created at {output_path} (size: {os.path.getsize(output_path)} bytes)")
+
+        # Generate avatar URL for the frontend
+        avatar_url = f"/static/uploads/{os.path.basename(output_path)}"
+        print(f"Returning URL: {avatar_url}")
+
+        return jsonify({"avatar_model_url": avatar_url}), 200
+
+    except Exception as e:
+        print(f"Error generating avatar: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 
 
 @api.route("/save-avatar", methods=["POST"])

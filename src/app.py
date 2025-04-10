@@ -1,3 +1,4 @@
+
 import os
 from flask import Flask, request, jsonify, url_for, send_from_directory
 from flask_migrate import Migrate
@@ -9,6 +10,9 @@ from api.admin import setup_admin
 from api.commands import setup_commands
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 
 
 
@@ -43,6 +47,8 @@ app.register_blueprint(api, url_prefix='/api')
 @app.errorhandler(APIException)
 def handle_invalid_usage(error):
     return jsonify(error.to_dict()), error.status_code
+
+
 
 # Root route shows sitemap or JSON message
 @app.route('/')

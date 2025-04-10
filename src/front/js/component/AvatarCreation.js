@@ -1,6 +1,5 @@
 // /src/components/AvatarCreation.js
 import React, { useState } from 'react';
-import axios from 'axios';
 
 const AvatarCreation = ({ onAvatarCreated }) => {
   const [file, setFile] = useState(null);
@@ -14,8 +13,17 @@ const AvatarCreation = ({ onAvatarCreated }) => {
     setIsLoading(true);
 
     try {
-      const res = await axios.post('/api/create-avatar', formData);
-      onAvatarCreated(res.data.avatar_url);
+      const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/create-avatar`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error('Error uploading image');
+      }
+
+      const data = await res.json();
+      onAvatarCreated(data.avatar_url);
     } catch (err) {
       alert('Error uploading image');
     } finally {
